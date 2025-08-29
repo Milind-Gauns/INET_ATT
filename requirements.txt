@@ -1,0 +1,7 @@
+streamlit
+sqlalchemy
+psycopg2-binary
+pandas
+python-dateutil
+reportlab
+boto3
