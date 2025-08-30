@@ -15,13 +15,13 @@ def login_ui():
         p = st.text_input("Password", type="password")
         ok = st.form_submit_button("Sign in")
         if ok:
-            rec = USERS.get(u)
-            if rec and rec["password"] == p:
-                st.session_state.user = {"username": u, "role": rec["role"]}
-                st.success(f"Welcome, {u} ({rec['role']})")
-                st.experimental_rerun()
-            else:
-                st.error("Invalid credentials")
+    rec = USERS.get(u)
+    if rec and rec["password"] == p:
+        st.session_state.user = {"username": u, "role": rec["role"]}
+        st.success(f"Welcome, {u} ({rec['role']})")
+        st.rerun()  # correct API
+    else:
+        st.error("Invalid credentials")
 
 def require_login(roles=None):
     if "user" not in st.session_state:
