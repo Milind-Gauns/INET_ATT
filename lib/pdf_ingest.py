@@ -2,7 +2,7 @@ import re
 import pdfplumber
 import pandas as pd
 from io import BytesIO
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, List
 
 MONTH_MAP = {
     "JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
@@ -19,14 +19,8 @@ def _extract_text(file_bytes: bytes) -> str:
 
 def parse_payslip(file_bytes: bytes) -> Dict[str, Any]:
     """
-    Returns dict: {name, month, year, gross, basic, hra, pf_ee, pf_er, esi_ee, esi_er, lwf_ee, lwf_er, admin_pf, net}
-    Works with the sample slip format that has lines like:
-      - 'PAY SLIP FOR THE MONTH OF JUL 2025'
-      - 'NAME OF THE STAFF: VISHVAM SAWANT'
-      - 'BASIC PAY @ 60% ...: 24103'
-      - 'H.R.A @ 40% ...: 16068'
-      - 'PROVIDENT FUND (EMPLOYEE) ... : 2892'
-      - 'NET PAYABLE ... : 37269'  or 'NET PAY : Rs. 37269.00'
+    Parse single pay slip PDF.
+    Returns dict: name, month, year, gross, basic, hra, pf_ee, pf_er, esi_ee, esi_er, lwf_ee, lwf_er, admin_pf, net
     """
     text = _extract_text(file_bytes)
 
@@ -69,39 +63,26 @@ def parse_payslip(file_bytes: bytes) -> Dict[str, Any]:
 
 def parse_consolidated(file_bytes: bytes) -> pd.DataFrame:
     """
-    Parses the 'CONSOLIDATED SALARY STATEMENT...' table that uses '|' pipes per column.
-    We split rows on '|' and pick key columns; we also capture the last three numeric columns as (sal_c, adj, net).
+    Parses a pipe-separated consolidated salary table.
+    Returns DataFrame with columns: name, designation, wage_rate, net
     """
     text = _extract_text(file_bytes)
     lines = [ln for ln in text.splitlines() if ln.strip().startswith("|") and "|" in ln]
     rows: List[dict] = []
     for ln in lines:
         parts = [p.strip() for p in ln.split("|")]
-        # Skip header ruler lines etc.
-        if len(parts) < 10: 
+        if len(parts) < 10:
             continue
-        # Heuristic: data rows begin with serial number in parts[1]
-        if not parts[1].isdigit():
+        if not parts[1].isdigit():  # SR NO guard
             continue
-
-        # indices (based on the sample header):
-        # 1: SR NO, 2: NAME, 3: PLACE, 4: LOCATION/PROJECT, 5: DES, 6: WAGE RATE, ... many columns ...
-        # last 3 numeric columns are: SAL-C, ADJ, NET PAY
         try:
             name = parts[2]
             desg = parts[5]
             wage_rate = float(parts[6].replace(",", "")) if parts[6] else None
-            # pull numeric tail safely
-            tail = [p for p in parts[-4:]]  # e.g. ['241', '37269', '0', '37269'] sometimes includes admin before SAL-C
+            tail = [p for p in parts[-4:]]  # pick last few numeric cells
             nums = [float(x.replace(",", "")) for x in tail if re.fullmatch(r"[0-9,\.]+", x)]
-            # best effort: last one is NET
             net = nums[-1] if nums else None
-            rows.append({
-                "name": name,
-                "designation": desg,
-                "wage_rate": wage_rate,
-                "net": net
-            })
+            rows.append({"name": name, "designation": desg, "wage_rate": wage_rate, "net": net})
         except Exception:
             continue
     return pd.DataFrame(rows)
