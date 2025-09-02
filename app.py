@@ -10,6 +10,10 @@ from lib.auth import require_login, user_role
 from lib.db import ensure_schema, seed_if_empty, db, engine
 from lib.payroll import run_payroll
 from lib.ui import inject_theme_css, top_nav, stat_card, chart_card, get_theme
+from lib.auth import logout_button
+# ...
+logout_button("Logout")
+
 from lib.pdf_ingest import parse_payslip, parse_consolidated
 from lib.storage import put_bytes, presigned_url
 try:
