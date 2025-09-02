@@ -77,3 +77,77 @@ def inject_theme_css(theme: str | None = None):
 
           /* Centered login */
           .center-wrap {{
+            min-height: calc(100vh - 120px);
+            display:flex; align-items:center; justify-content:center;
+          }}
+          .login-card {{
+            width: 480px; border-radius:16px; padding: 26px;
+            background: var(--card); border: 1px solid var(--border);
+          }}
+          .login-hero {{ text-align:center; margin-bottom: 18px; }}
+          .login-logo {{ width: 96px; height:auto; opacity:.98; margin-bottom:.4rem; }}
+
+          /* Alerts match theme */
+          .stAlert {{ background: var(--alert-bg) !important; color: var(--alert-text) !important; border-radius:12px; }}
+          .stAlert p {{ color: var(--alert-text) !important; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ---------- Building blocks ----------
+def top_nav(active="Dashboard", username: str | None = None):
+    st.markdown('<div class="topbar">', unsafe_allow_html=True)
+    left, middle, right = st.columns([2, 6, 2])
+
+    with left:
+        logo_path = "assets/logo.png"
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=40)
+        st.markdown('<div class="brand"><span>HRMS</span></div>', unsafe_allow_html=True)
+
+    with middle:
+        selected = option_menu(
+            None,
+            ["Dashboard", "Attendance", "Payroll", "Employees", "Reports"],
+            icons=["grid", "clock", "cash-coin", "people", "bar-chart"],
+            orientation="horizontal",
+            default_index=["Dashboard","Attendance","Payroll","Employees","Reports"].index(active),
+            styles={
+                "container": {"background": "transparent", "padding": "0"},
+                "nav-link": {"font-size": "14px", "padding":"8px 14px", "color":"var(--muted)"},
+                "nav-link-selected": {"background-color": "var(--nav-sel)", "color":"var(--text)", "border-radius":"10px"},
+            },
+        )
+
+    with right:
+        is_light = st.toggle("Light", value=(get_theme()=="light"))
+        new_theme = "light" if is_light else "dark"
+        if new_theme != get_theme():
+            set_theme(new_theme)
+            st.rerun()
+
+        if username:
+            st.caption(f"Signed in as **{username}**")
+            if st.button("Logout"):
+                if "user" in st.session_state: del st.session_state["user"]
+                st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    return selected
+
+def stat_card(label: str, value: str):
+    st.markdown(
+        f"""
+        <div class="card">
+          <div class="metric">{value}</div>
+          <div class="metric-label">{label}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def chart_card(title: str, chart):
+    st.markdown(f"<div class='card'><div style='font-weight:700;margin-bottom:.3rem'>{title}</div>", unsafe_allow_html=True)
+    st.altair_chart(chart, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
