@@ -1,6 +1,7 @@
 import streamlit as st
+from .ui import inject_base_css
 
-# Demo credentials ONLY. Replace with real auth later.
+# Demo credentials ONLY
 USERS = {
     "admin":      {"password": "admin123", "role": "Admin"},
     "supervisor": {"password": "super123", "role": "Supervisor"},
@@ -9,19 +10,22 @@ USERS = {
 }
 
 def login_ui():
-    st.title("HRMS Login")
+    inject_base_css()
+    st.markdown('<div class="center-wrap"><div class="login-card">', unsafe_allow_html=True)
+    st.markdown("### Sign in")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in")
+        submitted = st.form_submit_button("Sign in", use_container_width=True)
         if submitted:
             rec = USERS.get(username)
             if rec and rec["password"] == password:
                 st.session_state.user = {"username": username, "role": rec["role"]}
                 st.success(f"Welcome, {username} ({rec['role']})")
-                st.rerun()  # modern Streamlit; replaces st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials")
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 def require_login(roles=None):
     if "user" not in st.session_state:
@@ -35,6 +39,7 @@ def user_role():
     return st.session_state.get("user", {}).get("role")
 
 def logout_button():
-    if "user" in st.session_state and st.sidebar.button("Logout"):
+    # Optional: put a logout button somewhere in content; or keep top-right reserved (see ui.top_nav)
+    if "user" in st.session_state and st.button("Logout"):
         del st.session_state["user"]
         st.rerun()
