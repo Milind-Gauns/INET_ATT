@@ -1,51 +1,68 @@
+# lib/auth.py
+from __future__ import annotations
 import os
 import streamlit as st
-from .ui import inject_theme_css, apply_login_layout
 
+# --- very simple credential store for demo ---
+# Change these to whatever you want, or wire up to a DB later.
 USERS = {
-    "admin": {"password": "admin123", "role": "Admin"},
-    "supervisor": {"password": "super123", "role": "Supervisor"},
-    "client": {"password": "client123", "role": "Client"},
-    "employee": {"password": "emp123", "role": "Employee"},
+    "admin":      {"password": "admin",  "role": "Admin"},
+    "client":     {"password": "client", "role": "Client"},
+    "supervisor": {"password": "super",  "role": "Supervisor"},
+    "employee":   {"password": "emp",    "role": "Employee"},
 }
 
-def login_ui():
-    inject_theme_css()
-    apply_login_layout()
+APP_TITLE = "INET Computer Services HRMS"
+LOGO_PATH = "assets/logo.png"  # optional; shown on login if present
 
-    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
 
-    # ---- brand block (big logo + title) ----
-    st.markdown('<div class="login-hero">', unsafe_allow_html=True)
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
-    st.markdown("#### INET Computer Services HRMS")
-    st.markdown('</div>', unsafe_allow_html=True)
+def _logo():
+    """Show the logo on the login screen, if present."""
+    if os.path.exists(LOGO_PATH):
+        st.image(LOGO_PATH, width=96)
 
-    # ---- card with form ----
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown("### Sign in")
-    with st.form("login"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in", use_container_width=True)
-        if submitted:
-            rec = USERS.get(username)
-            if rec and rec["password"] == password:
-                st.session_state.user = {"username": username, "role": rec["role"]}
-                st.success(f"Welcome, {username} ({rec['role']})")
-                st.rerun()
-            else:
-                st.error("Invalid credentials")
-    st.markdown('</div>', unsafe_allow_html=True)  # /login-card
-    st.markdown('</div>', unsafe_allow_html=True)  # /center-wrap
 
-def require_login(roles=None):
-    if "user" not in st.session_state:
-        login_ui(); st.stop()
-    if roles and st.session_state.user["role"] not in roles:
-        st.error("You don’t have access to this page."); st.stop()
+def login_ui() -> bool:
+    """Render the login form centered on the page and return True on success."""
+    st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)  # top spacing
+    _logo()
+    st.markdown(f"<h3 style='text-align:center;margin:6px 0 18px 0'>{APP_TITLE}</h3>",
+                unsafe_allow_html=True)
 
-def user_role():
-    return st.session_state.get("user", {}).get("role")
+    with st.form("login_form", clear_on_submit=False):
+        u = st.text_input("Username", autocomplete="username")
+        p = st.text_input("Password", type="password", autocomplete="current-password")
+        ok = st.form_submit_button("Sign in", type="primary")
+
+    if ok:
+        rec = USERS.get(u)
+        if rec and p == rec["password"]:
+            st.session_state["user"] = {"username": u, "role": rec["role"]}
+            st.success(f"Welcome, {u} ({rec['role']})")
+            return True
+        else:
+            st.error("Invalid username or password")
+    return False
+
+
+def require_login() -> None:
+    """
+    If no active session user, show the login UI and stop the app run.
+    """
+    if st.session_state.get("user"):
+        return
+    if not login_ui():
+        st.stop()
+
+
+def logout_button(label: str = "Logout") -> None:
+    """Render a logout button; on click it clears the session user and reruns."""
+    if st.button(label, key="logout_btn"):
+        st.session_state.pop("user", None)
+        st.session_state.pop("active_page", None)
+        st.rerun()
+
+
+def user_role() -> str:
+    """Convenience accessor for the current user's role."""
+    return (st.session_state.get("user") or {}).get("role", "Guest")
