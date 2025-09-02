@@ -13,53 +13,40 @@ USERS = {
 APP_TITLE = "INET Computer Services HRMS"
 LOGO_PATH = "assets/logo.png"
 
-
 def _logo():
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, width=96)
 
-
 def login_ui() -> None:
-    """Show login UI and handle submission. On success -> set session + rerun."""
     st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
     _logo()
     st.markdown(
         f"<h3 style='text-align:center;margin:6px 0 18px 0'>{APP_TITLE}</h3>",
         unsafe_allow_html=True,
     )
-
     with st.form("login_form", clear_on_submit=False):
         u = st.text_input("Username", autocomplete="username")
         p = st.text_input("Password", type="password", autocomplete="current-password")
         ok = st.form_submit_button("Sign in", type="primary")
-
     if ok:
         rec = USERS.get(u)
         if rec and p == rec["password"]:
             st.session_state["user"] = {"username": u, "role": rec["role"]}
-            st.success(f"Welcome, {u} ({rec['role']})")
-            # Immediate clean rerun to remove the login UI from the page
             st.rerun()
         else:
             st.error("Invalid username or password")
 
-
 def require_login() -> None:
-    """
-    If user not logged in, render login UI and stop the run.
-    """
     if st.session_state.get("user"):
         return
     login_ui()
-    st.stop()  # prevent the rest of the page from rendering under the login form
-
+    st.stop()
 
 def logout_button(label: str = "Logout") -> None:
     if st.button(label, key="logout_btn"):
         st.session_state.pop("user", None)
         st.session_state.pop("active_page", None)
         st.rerun()
-
 
 def user_role() -> str:
     return (st.session_state.get("user") or {}).get("role", "Guest")
