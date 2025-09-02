@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from .ui import inject_theme_css
 
@@ -9,8 +10,20 @@ USERS = {
 }
 
 def login_ui():
-    inject_theme_css()
-    st.markdown('<div class="center-wrap"><div class="login-card">', unsafe_allow_html=True)
+    inject_theme_css()  # ensure our CSS/variables are loaded
+
+    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
+
+    # ---- brand block (big logo + title) ----
+    st.markdown('<div class="login-hero">', unsafe_allow_html=True)
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        st.image(logo_path, use_column_width=False, output_format="PNG", width=96)
+    st.markdown("#### INET Computer Services HRMS")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---- card with form ----
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
     st.markdown("### Sign in")
     with st.form("login"):
         username = st.text_input("Username")
@@ -24,7 +37,9 @@ def login_ui():
                 st.rerun()
             else:
                 st.error("Invalid credentials")
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # /login-card
+
+    st.markdown('</div>', unsafe_allow_html=True)  # /center-wrap
 
 def require_login(roles=None):
     if "user" not in st.session_state:
