@@ -1,6 +1,8 @@
 [theme]
-primaryColor = "#2563EB"
-backgroundColor = "#0B1021"
-secondaryBackgroundColor = "#121A2B"
-textColor = "#E5E7EB"
+base = "light"
+# HRMS palette (light)
+primaryColor = "#2563EB"                # Indigo 600
+backgroundColor = "#F7F9FC"             # Very light slate
+secondaryBackgroundColor = "#FFFFFF"    # White cards
+textColor = "#0F172A"                   # Slate-900
 font = "Inter"
