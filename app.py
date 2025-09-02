@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -11,12 +12,18 @@ from lib.payroll import run_payroll
 from lib.ui import inject_theme_css, top_nav, stat_card, chart_card, get_theme
 from lib.pdf_ingest import parse_payslip, parse_consolidated
 from lib.storage import put_bytes, presigned_url
-from lib.matching import match_consolidated_names  # used on Docs page
+try:
+    from lib.matching import match_consolidated_names
+except Exception:
+    match_consolidated_names = None
 
 # ---------- Page & Theme ----------
-st.set_page_config(page_title="HRMS Dashboard", page_icon="🧩", layout="wide")
+st.set_page_config(page_title="INET HRMS", page_icon="🧩", layout="wide")
+
+# Default theme -> light
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "dark"
+    st.session_state["theme"] = "light"
+
 inject_theme_css(get_theme())
 
 # ---------- Data init ----------
@@ -29,15 +36,18 @@ username = st.session_state["user"]["username"]
 role = user_role()
 
 # ---------- Top Navigation ----------
-page = top_nav("Dashboard", username=username)
+active = st.session_state.get("active_page", "dashboard")
+page_key = top_nav(active, username=username, app_name="INET HRMS", logo_path="assets/logo.png")
 
 # ======================================================
 #                         PAGES
 # ======================================================
 
 # ---------- DASHBOARD ----------
-if page == "Dashboard":
-    st.title("Overview")
+if page_key == "dashboard":
+    st.markdown('<div class="hrms-section-title">', unsafe_allow_html=True)
+    st.title("INET HRMS — Overview")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     with db() as conn:
         # Headcount
@@ -73,14 +83,10 @@ if page == "Dashboard":
             wvd["period"] = wvd["year"].astype(str) + "-" + wvd["month"].astype(int).astype(str).str.zfill(2)
 
     c1, c2, c3 = st.columns(3)
-    with c1:
-        stat_card("Headcount", f"{headcount}")
-    with c2:
-        stat_card("Salary Disbursed (All-time)", f"₹ {total_net:,.0f}")
-    with c3:
-        stat_card("Compliance", "✅ PF/ESI Filed")  # placeholder
+    with c1: stat_card("Headcount", f"{headcount}")
+    with c2: stat_card("Salary Disbursed (All-time)", f"₹ {total_net:,.0f}")
+    with c3: stat_card("Compliance", "✅ PF/ESI Filed")
 
-    # Charts
     if not att_df.empty:
         chart1 = alt.Chart(att_df).mark_line(point=True).encode(
             x=alt.X("d:T", title="Day"),
@@ -108,8 +114,8 @@ if page == "Dashboard":
     else:
         st.info("Run payroll to see Wages vs Deductions.")
 
-# ---------- ATTENDANCE (UPDATED) ----------
-elif page == "Attendance":
+# ---------- ATTENDANCE ----------
+elif page_key == "attendance":
     st.title("Attendance Import (CSV)")
     st.write("CSV header: **code, day, punch_in, punch_out, source**")
 
@@ -126,11 +132,9 @@ elif page == "Attendance":
         df = pd.read_csv(att_file, dtype={"code": str})
         st.dataframe(df.head(), use_container_width=True)
 
-        # Optional mapping CSV
         code_to_name = {}
         if map_file:
             map_df = pd.read_csv(map_file, dtype={"code": str})
-            # normalize keys
             for _, r in map_df.iterrows():
                 c = str(r.get("code", "")).strip()
                 n = str(r.get("name", "")).strip()
@@ -139,25 +143,19 @@ elif page == "Attendance":
 
         created, inserted = 0, 0
         with db() as conn:
-            # Load all codes once (works on SQLite/Postgres)
             emp_df = pd.read_sql("SELECT id, code, first_name, last_name FROM employees", conn.connection)
             id_by_code = {str(r["code"]).strip(): int(r["id"]) for _, r in emp_df.iterrows()}
 
-            # Figure out missing codes from the CSV
             csv_codes = {str(c).strip() for c in df["code"].tolist()}
             missing = sorted(csv_codes - set(id_by_code.keys()))
 
-            # Create employees for missing codes (optional)
             if missing and auto_create:
                 for code in missing:
-                    fname = ""
-                    lname = ""
+                    fname = ""; lname = ""
                     if code in code_to_name and code_to_name[code]:
-                        # split provided full name
                         parts = [p for p in code_to_name[code].replace(".", "").split() if p]
                         if parts:
-                            fname = parts[0]
-                            lname = " ".join(parts[1:])
+                            fname = parts[0]; lname = " ".join(parts[1:])
                     conn.exec_driver_sql(
                         "INSERT INTO employees(code, first_name, last_name, base_salary, active) VALUES (?, ?, ?, ?, ?)"
                         if engine.dialect.name == "sqlite" else
@@ -166,17 +164,15 @@ elif page == "Attendance":
                     )
                     created += 1
 
-                # refresh map after inserts
                 emp_df = pd.read_sql("SELECT id, code FROM employees", conn.connection)
                 id_by_code = {str(r["code"]).strip(): int(r["id"]) for _, r in emp_df.iterrows()}
 
-            # Insert attendance rows
             pmark = "?" if engine.dialect.name == "sqlite" else "%s"
             for _, row in df.iterrows():
                 code = str(row["code"]).strip()
                 emp_id = id_by_code.get(code)
                 if not emp_id:
-                    continue  # still missing & not created -> skip
+                    continue
                 conn.exec_driver_sql(
                     f"INSERT INTO attendance_logs(employee_id, day, punch_in, punch_out, source) "
                     f"VALUES ({pmark}, {pmark}, {pmark}, {pmark}, {pmark})",
@@ -184,18 +180,16 @@ elif page == "Attendance":
                 )
                 inserted += 1
 
-        if created:
-            st.success(f"Created {created} missing employee(s).")
-        if inserted:
-            st.success(f"Imported {inserted} attendance row(s).")
+        if created:  st.success(f"Created {created} missing employee(s).")
+        if inserted: st.success(f"Imported {inserted} attendance row(s).")
         if not inserted:
             if not auto_create and missing:
                 st.warning(f"No rows imported. {len(missing)} code(s) not found. Upload a mapping CSV or enable 'Create missing employees'.")
             else:
-                st.warning("No rows imported. Check that the 'code' values in your CSV match the employees table.")
+                st.warning("No rows imported. Check that CSV 'code' values match employee codes.")
 
 # ---------- PAYROLL ----------
-elif page == "Payroll":
+elif page_key == "payroll":
     st.title("Payroll")
     col1, col2 = st.columns(2)
     month = col1.selectbox("Month", list(range(1, 13)), index=date.today().month - 1)
@@ -206,12 +200,11 @@ elif page == "Payroll":
         st.success(f"Processed {len(results)} employees")
         st.dataframe(pd.DataFrame(results), use_container_width=True)
 
-# ---------- DOCS (PDF ingest + bulk write) ----------
-elif page == "Docs":
+# ---------- DOCS ----------
+elif page_key == "docs":
     st.title("Payroll Documents")
     tab1, tab2 = st.tabs(["Single Pay Slip", "Consolidated Statement"])
 
-    # ---- Single Pay Slip ----
     with tab1:
         f = st.file_uploader("Upload Pay Slip (PDF)", type=["pdf"], key="pslip")
         if f:
@@ -232,14 +225,11 @@ elif page == "Docs":
                 st.write("**NET**:", parsed.get("net"))
 
             if st.button("Save to DB & Storage", type="primary"):
-                year = int(parsed["year"]); month = int(parsed["month"])
+                year_ = int(parsed["year"]); month_ = int(parsed["month"])
                 emp_name = (parsed["name"] or "").strip()
-
-                fname, *rest = emp_name.split(" ")
-                lname = " ".join(rest) if rest else ""
+                fname, *rest = emp_name.split(" "); lname = " ".join(rest) if rest else ""
 
                 with db() as conn:
-                    # find employee by first/last name
                     row = conn.execute(
                         text("SELECT id FROM employees WHERE lower(first_name)=lower(:f) AND lower(last_name)=lower(:l)"),
                         {"f": fname, "l": lname},
@@ -248,7 +238,6 @@ elif page == "Docs":
                     if row:
                         emp_id = row[0]
                     else:
-                        # create minimal employee
                         code = "E" + str(abs(hash(emp_name)) % 10_000)
                         conn.exec_driver_sql(
                             "INSERT INTO employees(code, first_name, last_name, base_salary, active) VALUES (?, ?, ?, ?, ?)"
@@ -260,12 +249,11 @@ elif page == "Docs":
                             "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM employees"
                         ).scalar()
 
-                    # ensure payroll run
                     run = conn.exec_driver_sql(
                         "SELECT id FROM payroll_runs WHERE month=? AND year=?"
                         if engine.dialect.name=="sqlite" else
                         "SELECT id FROM payroll_runs WHERE month=%s AND year=%s",
-                        (month, year)
+                        (month_, year_)
                     ).fetchone()
                     if run:
                         run_id = run[0]
@@ -274,14 +262,13 @@ elif page == "Docs":
                             "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (?,?,?,?)"
                             if engine.dialect.name=="sqlite" else
                             "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (%s,%s,%s,%s)",
-                            (month, year, "Imported", dt.datetime.utcnow())
+                            (month_, year_, "Imported", dt.datetime.utcnow())
                         )
                         run_id = conn.exec_driver_sql(
                             "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM payroll_runs"
                         ).scalar()
 
-                    # store PDF & insert payslip
-                    key = f"uploads/{year}/{month:02d}/payslip_{emp_id}.pdf"
+                    key = f"uploads/{year_}/{month_:02d}/payslip_{emp_id}.pdf"
                     put_bytes(key, data)
                     url = presigned_url(key) or key
 
@@ -289,107 +276,96 @@ elif page == "Docs":
                         "INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) VALUES (?,?,?,?,?,?)"
                         if engine.dialect.name=="sqlite" else
                         "INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) VALUES (%s,%s,%s,%s,%s,%s)",
-                        (
-                            run_id,
-                            emp_id,
-                            parsed.get("gross") or 0,
-                            (parsed.get("gross") or 0) - (parsed.get("net") or 0),
-                            parsed.get("net") or 0,
-                            url
-                        )
+                        (run_id, emp_id, parsed.get("gross") or 0,
+                         (parsed.get("gross") or 0) - (parsed.get("net") or 0),
+                         parsed.get("net") or 0, url)
                     )
                 st.success("Saved payslip & uploaded PDF")
 
-    # ---- Consolidated ----
     with tab2:
         f2 = st.file_uploader("Upload Consolidated Statement (PDF)", type=["pdf"], key="consol")
         if f2:
             df = parse_consolidated(f2.read())
             st.dataframe(df, use_container_width=True)
 
-            # controls for run
             c1, c2 = st.columns(2)
             sel_month = c1.selectbox("Payroll month", list(range(1, 13)), index=date.today().month - 1, key="consol_m")
             sel_year  = c2.number_input("Payroll year", min_value=2000, max_value=2100, value=date.today().year, step=1, key="consol_y")
 
-            # Preview & match
-            if st.button("Preview & Match names", type="primary"):
-                with db() as conn:
-                    emp_df = pd.read_sql("SELECT id, code, first_name, last_name FROM employees", conn.connection)
-                matched = match_consolidated_names(df, emp_df, threshold=0.86)
-                st.session_state["consol_matched"] = matched
-                st.session_state["consol_month"] = int(sel_month)
-                st.session_state["consol_year"] = int(sel_year)
-
-            if "consol_matched" in st.session_state:
-                matched = st.session_state["consol_matched"]
-                st.subheader("Match preview")
-                st.dataframe(matched, use_container_width=True)
-
-                um = matched[matched["match_type"] == "unmatched"]
-                if not um.empty:
-                    st.warning(f"{len(um)} names were not matched. You can download and correct them.")
-                    st.download_button(
-                        "Download unmatched (CSV)",
-                        um.to_csv(index=False).encode(),
-                        "unmatched_names.csv",
-                        "text/csv",
-                    )
-                else:
-                    st.success("All names matched.")
-
-                if st.button("Write matched to payslips"):
-                    month = st.session_state["consol_month"]
-                    year  = st.session_state["consol_year"]
-                    to_write = matched[matched["emp_id"].notna()].copy()
-
-                    inserted = 0
+            if match_consolidated_names is None:
+                st.info("Name matching helper not found (lib/matching.py). Add it to enable preview & matching.")
+            else:
+                if st.button("Preview & Match names", type="primary"):
                     with db() as conn:
-                        # ensure run
-                        run = conn.exec_driver_sql(
-                            "SELECT id FROM payroll_runs WHERE month=? AND year=?"
-                            if engine.dialect.name=="sqlite" else
-                            "SELECT id FROM payroll_runs WHERE month=%s AND year=%s",
-                            (month, year)
-                        ).fetchone()
-                        if run:
-                            run_id = run[0]
-                        else:
-                            conn.exec_driver_sql(
-                                "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (?,?,?,?)"
+                        emp_df = pd.read_sql("SELECT id, code, first_name, last_name FROM employees", conn.connection)
+                    matched = match_consolidated_names(df, emp_df, threshold=0.86)
+                    st.session_state["consol_matched"] = matched
+                    st.session_state["consol_month"] = int(sel_month)
+                    st.session_state["consol_year"] = int(sel_year)
+
+                if "consol_matched" in st.session_state:
+                    matched = st.session_state["consol_matched"]
+                    st.subheader("Match preview")
+                    st.dataframe(matched, use_container_width=True)
+
+                    um = matched[matched["match_type"] == "unmatched"]
+                    if not um.empty:
+                        st.warning(f"{len(um)} names were not matched. You can download and correct them.")
+                        st.download_button("Download unmatched (CSV)", um.to_csv(index=False).encode(),
+                                           "unmatched_names.csv", "text/csv")
+                    else:
+                        st.success("All names matched.")
+
+                    if st.button("Write matched to payslips"):
+                        month_ = st.session_state["consol_month"]
+                        year_  = st.session_state["consol_year"]
+                        to_write = matched[matched["emp_id"].notna()].copy()
+
+                        inserted = 0
+                        with db() as conn:
+                            run = conn.exec_driver_sql(
+                                "SELECT id FROM payroll_runs WHERE month=? AND year=?"
                                 if engine.dialect.name=="sqlite" else
-                                "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (%s,%s,%s,%s)",
-                                (month, year, "Imported", dt.datetime.utcnow())
-                            )
-                            run_id = conn.exec_driver_sql(
-                                "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM payroll_runs"
-                            ).scalar()
+                                "SELECT id FROM payroll_runs WHERE month=%s AND year=%s",
+                                (month_, year_)
+                            ).fetchone()
+                            if run:
+                                run_id = run[0]
+                            else:
+                                conn.exec_driver_sql(
+                                    "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (?,?,?,?)"
+                                    if engine.dialect.name=="sqlite" else
+                                    "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (%s,%s,%s,%s)",
+                                    (month_, year_, "Imported", dt.datetime.utcnow())
+                                )
+                                run_id = conn.exec_driver_sql(
+                                    "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM payroll_runs"
+                                ).scalar()
 
-                        pmark = "?" if engine.dialect.name == "sqlite" else "%s"
-                        for _, r in to_write.iterrows():
-                            emp_id = int(r["emp_id"])
-                            net = float(r["net"] or 0.0)
-                            gross = net
-                            ded = 0.0
-                            conn.exec_driver_sql(
-                                f"INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) "
-                                f"VALUES ({pmark},{pmark},{pmark},{pmark},{pmark},{pmark})",
-                                (run_id, emp_id, gross, ded, net, None)
-                            )
-                            inserted += 1
+                            pmark = "?" if engine.dialect.name == "sqlite" else "%s"
+                            for _, r in to_write.iterrows():
+                                emp_id = int(r["emp_id"])
+                                net = float(r["net"] or 0.0)
+                                gross = net; ded = 0.0
+                                conn.exec_driver_sql(
+                                    f"INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) "
+                                    f"VALUES ({pmark},{pmark},{pmark},{pmark},{pmark},{pmark})",
+                                    (run_id, emp_id, gross, ded, net, None)
+                                )
+                                inserted += 1
 
-                    st.success(f"Wrote {inserted} payslips to run {month:02d}/{year}.")
+                        st.success(f"Wrote {inserted} payslips to run {month_:02d}/{year_}.")
+        # Convenience export of parsed table
+        if "df" in locals():
+            st.download_button("Download as CSV", df.to_csv(index=False).encode(), "consolidated.csv", "text/csv")
 
 # ---------- EMPLOYEES ----------
-elif page == "Employees":
+elif page_key == "employees":
     st.title("Employees")
-    df = pd.read_sql(
-        "SELECT id, code, first_name, last_name, base_salary, active FROM employees",
-        con=engine,
-    )
+    df = pd.read_sql("SELECT id, code, first_name, last_name, base_salary, active FROM employees", con=engine)
     st.dataframe(df, use_container_width=True)
 
 # ---------- REPORTS ----------
-elif page == "Reports":
+elif page_key == "reports":
     st.title("Reports")
     st.info("Add attendance trends, compliance, embeds, etc.")
