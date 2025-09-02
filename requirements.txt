@@ -5,3 +5,4 @@ pandas
 python-dateutil
 reportlab
 boto3
+streamlit-option-menu
