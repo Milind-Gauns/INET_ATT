@@ -1,203 +1,216 @@
+# lib/ui.py
+from __future__ import annotations
+import base64
 import streamlit as st
-from pathlib import Path
+from typing import Dict
+import altair as alt
+import os
 
-# -------------------- THEME --------------------
+# ---- Palettes (light first) ----
+PALETTE_LIGHT: Dict[str, str] = {
+    "mode": "light",
+    "primary": "#2E5AAC",           # HRMS blue
+    "accent": "#10B981",            # emerald
+    "bg": "#F7FAFC",
+    "panel": "#FFFFFF",
+    "text": "#0F172A",
+    "muted": "#64748B"              # slate-500
+}
 
-def get_theme() -> str:
-    """
-    Returns 'light' or 'dark'. Default is LIGHT.
-    """
-    if "theme" not in st.session_state:
-        st.session_state["theme"] = "light"   # default to light
-    return st.session_state["theme"]
+PALETTE_DARK: Dict[str, str] = {
+    "mode": "dark",
+    "primary": "#6EA8FE",
+    "accent": "#34D399",
+    "bg": "#0B1220",                # deep navy
+    "panel": "#111827",             # slate-900
+    "text": "#E5E7EB",              # slate-200
+    "muted": "#9CA3AF"              # slate-400
+}
 
-def _rerun():
+def get_theme() -> Dict[str, str]:
+    """Return the active theme dict. Defaults to LIGHT."""
+    mode = st.session_state.get("theme", "light")
+    return PALETTE_LIGHT if mode == "light" else PALETTE_DARK
+
+
+def _img_to_base64(path: str) -> str:
     try:
-        st.rerun()
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
     except Exception:
-        try:
-            st.experimental_rerun()  # older Streamlit
-        except Exception:
-            pass
+        return ""
 
-def inject_theme_css(current: str):
+
+def inject_theme_css(theme: Dict[str, str]) -> None:
+    """Inject CSS variables & component styling."""
+    css = f"""
+    <style>
+      :root {{
+        --hrms-primary: {theme['primary']};
+        --hrms-accent: {theme['accent']};
+        --hrms-bg: {theme['bg']};
+        --hrms-panel: {theme['panel']};
+        --hrms-text: {theme['text']};
+        --hrms-muted: {theme['muted']};
+        --hrms-card-radius: 16px;
+      }}
+
+      /* App background */
+      [data-testid="stAppViewContainer"] {{
+        background: var(--hrms-bg);
+        color: var(--hrms-text);
+      }}
+
+      /* Nav bar */
+      .hrms-nav {{
+        background: var(--hrms-panel);
+        border-radius: 14px;
+        padding: 10px 14px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+        margin-bottom: 8px;
+      }}
+      .hrms-brand {{
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 700; font-size: 20px; color: var(--hrms-text);
+      }}
+      .hrms-brand img {{
+        height: 34px; width: 34px; border-radius: 8px;
+        border: 1px solid rgba(0,0,0,0.06);
+        background: #fff;
+      }}
+      .hrms-nav-links a {{
+        text-decoration: none;
+        color: var(--hrms-text);
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 10px;
+      }}
+      .hrms-nav-links a.active {{
+        background: rgba(46,90,172,0.12);
+        color: var(--hrms-primary);
+      }}
+      .hrms-right .toggle-label {{
+        font-size: 12px; color: var(--hrms-muted); margin-right: 6px;
+      }}
+
+      /* KPI cards */
+      .hrms-card {{
+        background: var(--hrms-panel);
+        border-radius: var(--hrms-card-radius);
+        padding: 18px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+        border: 1px solid rgba(0,0,0,0.05);
+      }}
+      .hrms-kpi-title {{ color: var(--hrms-muted); font-size: 14px; margin-bottom: 4px; }}
+      .hrms-kpi-value {{ font-size: 34px; font-weight: 800; color: var(--hrms-text); }}
+
+      /* Section title spacing */
+      .hrms-section-title h1, .hrms-section-title h2 {{
+        margin-top: 6px !important;
+        margin-bottom: 6px !important;
+      }}
+
+      /* Buttons */
+      .stButton>button {{
+        border-radius: 10px;
+        border: none;
+        background: var(--hrms-primary);
+        color: white;
+        padding: 8px 14px;
+        font-weight: 600;
+      }}
+      .stButton>button:hover {{ filter: brightness(1.05); }}
+
+      /* Tabs */
+      .stTabs [data-baseweb="tab"] {{
+        font-weight: 600;
+      }}
+    </style>
     """
-    Injects CSS variables for both themes and applies the chosen one.
+    st.markdown(css, unsafe_allow_html=True)
+
+    # Altair global theme (clean)
+    alt.themes.enable("none")
+
+
+def _nav_link(label: str, key: str, active_key: str) -> str:
+    cls = "active" if key == active_key else ""
+    return f'<a class="{cls}" href="?page={key}">{label}</a>'
+
+
+def top_nav(active_key: str, username: str, app_name: str = "INET HRMS",
+            logo_path: str = "assets/logo.png") -> str:
     """
-    light_vars = """
-    --bg: #F7F9FC;
-    --card: #FFFFFF;
-    --text: #0F172A;
-    --muted: #475569;
-    --primary: #2563EB;          /* indigo-600 */
-    --primary-contrast: #FFFFFF;
-    --success: #16A34A;          /* green-600 */
-    --warning: #F59E0B;          /* amber-500 */
-    --danger: #DC2626;           /* red-600 */
-    --kpi: #0EA5E9;              /* sky-500 */
-    --border: #E5E7EB;
+    Render a top nav with logo, brand, page links, and theme toggle.
+    Returns the chosen page key (string).
     """
+    theme = get_theme()
+    light_on = theme["mode"] == "light"
 
-    dark_vars = """
-    --bg: #0F172A;               /* slate-900 */
-    --card: #111827;             /* gray-900 */
-    --text: #E5E7EB;             /* gray-200 */
-    --muted: #9CA3AF;            /* gray-400 */
-    --primary: #60A5FA;          /* blue-400 */
-    --primary-contrast: #0B1220;
-    --success: #34D399;          /* green-400 */
-    --warning: #FBBF24;          /* amber-400 */
-    --danger: #F87171;           /* red-400 */
-    --kpi: #38BDF8;              /* sky-400 */
-    --border: #1F2937;
-    """
+    # Keep selected page via query param or session
+    qp = st.query_params
+    if "page" in qp:
+        active_key = qp["page"]
 
-    chosen = light_vars if current == "light" else dark_vars
+    pages = [
+        ("Dashboard", "dashboard"),
+        ("Attendance", "attendance"),
+        ("Payroll", "payroll"),
+        ("Docs", "docs"),
+        ("Employees", "employees"),
+        ("Reports", "reports"),
+    ]
 
-    st.markdown(
-        f"""
-        <style>
-        :root {{ {light_vars} }}
-        [data-theme="dark"] {{ {dark_vars} }}
-        [data-theme="light"] {{ {light_vars} }}
+    # Build HTML nav links
+    links_html = "".join(_nav_link(lbl, key, active_key) for lbl, key in pages)
 
-        /* Apply theme to body */
-        body, .stApp {{ background: var(--bg); color: var(--text); }}
-
-        /* Top brand bar */
-        .hrms-navbar {{
-            position: sticky; top: 0; z-index: 100;
-            padding: 10px 14px;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg);
-        }}
-        .hrms-brand {{
-            display:flex; align-items:center; gap:10px;
-        }}
-        .hrms-brand img {{
-            height: 40px; width:auto;
-            filter: drop-shadow(0 2px 6px rgba(0,0,0,.12));
-            border-radius: 10px;
-        }}
-        .hrms-brand .name {{
-            font-weight: 800; letter-spacing:.3px;
-            font-size: 18px;
-        }}
-        .hrms-menu a, .hrms-menu button {{
-            padding: 8px 10px; border-radius: 10px;
-            text-decoration:none; border:1px solid transparent;
-            color: var(--text); background: transparent;
-        }}
-        .hrms-menu .active {{
-            background: color-mix(in srgb, var(--primary) 12%, transparent);
-            border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-            color: var(--text);
-        }}
-
-        /* Stat card */
-        .hrms-card {{
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 18px 18px 14px;
-        }}
-        .hrms-card .label {{ color: var(--muted); font-size: 13px; }}
-        .hrms-card .value {{ font-size: 28px; font-weight: 800; }}
-
-        /* Buttons */
-        .hrms-primary button {{
-            background: var(--primary) !important;
-            color: var(--primary-contrast) !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    # mark the chosen theme in DOM so CSS above can target
-    st.html(f"""<script>
-      document.documentElement.setAttribute('data-theme', '{current}');
-    </script>""")
-
-# -------------------- NAV --------------------
-
-def _nav_button(label: str, key: str, active: bool) -> bool:
-    css = "active" if active else ""
-    return st.button(label, key=f"nav_{key}", use_container_width=False, type="secondary")
-
-def top_nav(active_page: str = "Dashboard", username: str = "") -> str:
-    """
-    Renders the top navigation bar and returns the current page.
-    Stores the selected page in st.session_state['page'].
-    """
-    if "page" not in st.session_state:
-        st.session_state["page"] = active_page
+    # Logo b64
+    b64 = _img_to_base64(logo_path)
+    img_tag = f'<img src="data:image/png;base64,{b64}" alt="logo">' if b64 else ""
 
     with st.container():
-        st.markdown('<div class="hrms-navbar">', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([0.34, 0.46, 0.20])
-
-        # Brand + Logo
-        with c1:
-            logo_path = Path("assets/logo.png")
-            logo_html = ""
-            if logo_path.exists():
-                logo_html = f'<img src="app://assets/logo.png" alt="logo" />'
-            st.markdown(
-                f"""
-                <div class="hrms-brand">
-                    {logo_html}
-                    <div class="name">INET HRMS</div>
+        st.markdown(
+            f"""
+            <div class="hrms-nav">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div class="hrms-brand">{img_tag}<span>{app_name}</span></div>
+                <div class="hrms-nav-links" style="display:flex; gap:6px;">{links_html}</div>
+                <div class="hrms-right" style="display:flex; align-items:center; gap:10px;">
+                  <span class="toggle-label">Theme</span>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-        # Menu
-        with c2:
-            cols = st.columns(6)
-            items = ["Dashboard", "Attendance", "Payroll", "Docs", "Employees", "Reports"]
-            for idx, it in enumerate(items):
-                with cols[idx]:
-                    pressed = st.button(it, key=f"menu_{it}",
-                                        help=it,
-                                        type="secondary",
-                                        use_container_width=True)
-                    # 'active' look handled by CSS when needed; we keep logic simple here
-                    if pressed:
-                        st.session_state["page"] = it
+        # Render a real toggle (affects next rerun)
+        col1, col2, col3 = st.columns([0.78, 0.12, 0.10])
+        with col2:
+            toggle = st.toggle("Light", value=light_on, label_visibility="collapsed")
+        with col3:
+            st.write(f"Signed in as **{username}**")
 
-        # Theme + User
-        with c3:
-            st.write(f"Signed in as **{username or 'user'}**")
-            switch = st.toggle("Light", value=(get_theme() == "light"))
-            new_theme = "light" if switch else "dark"
-            if new_theme != get_theme():
-                st.session_state["theme"] = new_theme
-                _rerun()
+        # Handle toggle state
+        st.session_state["theme"] = "light" if toggle else "dark"
 
-            st.button("Logout", key="logout_btn", type="secondary")
+    # Return active page key and also mirror to st.session_state
+    st.session_state["active_page"] = active_key
+    return active_key
 
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    return st.session_state["page"]
+def stat_card(title: str, value: str) -> None:
+    st.markdown('<div class="hrms-card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="hrms-kpi-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hrms-kpi-value">{value}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------- CARDS/CHART WRAPPERS --------------------
 
-def stat_card(label: str, value: str):
-    st.markdown(
-        f"""
-        <div class="hrms-card">
-          <div class="value">{value}</div>
-          <div class="label">{label}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def chart_card(title: str, chart):
-    st.markdown(
-        f'<div class="hrms-card" style="padding:16px 16px 6px;"><div class="label" style="font-weight:700;margin-bottom:6px;">{title}</div>',
-        unsafe_allow_html=True,
-    )
+def chart_card(title: str, chart) -> None:
+    st.markdown('<div class="hrms-card">', unsafe_allow_html=True)
+    st.markdown(f"**{title}**")
     st.altair_chart(chart, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
