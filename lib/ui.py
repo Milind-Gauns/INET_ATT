@@ -2,7 +2,7 @@ import os
 import streamlit as st
 from streamlit_option_menu import option_menu
 
-# ---------- Theme tokens we control ----------
+# ---------- Theme tokens ----------
 _THEMES = {
     "dark": {
         "bg": "#0B1021",
@@ -54,13 +54,11 @@ def inject_theme_css(theme: str | None = None):
             --alert-text: {t["alert_text"]};
           }}
 
-          /* Make the whole app follow our theme (fixes light/dark inconsistencies) */
           html, body, .stApp {{ background-color: var(--bg) !important; color: var(--text) !important; }}
-          .block-container {{ padding-top: 1.2rem; padding-bottom: 1.6rem; max-width: 1200px; margin: 0 auto; }}
+          .block-container{{ padding-top:1.2rem; padding-bottom:1.6rem; max-width:1200px; margin:0 auto; }}
           header [data-testid="stHeader"] {{ background: transparent; }}
-          [data-testid="stSidebar"] {{ display: none; }}
+          [data-testid="stSidebar"]{{ display:none; }}
 
-          /* Top bar */
           .topbar {{
             position: sticky; top: 0; z-index: 1000;
             background: linear-gradient(180deg, var(--bg) 65%, rgba(0,0,0,0));
@@ -70,14 +68,13 @@ def inject_theme_css(theme: str | None = None):
           .brand {{ display:flex; gap:.6rem; align-items:center; font-weight:700; }}
           .brand span {{ font-size:18px; }}
 
-          /* Cards / metrics */
           .card {{ border-radius:16px; padding:1rem 1.25rem; background:var(--card); border:1px solid var(--border); }}
           .metric {{ font-size:28px; font-weight:700; line-height:1; }}
           .metric-label {{ color:var(--muted); font-size:12px; letter-spacing:.04em; }}
 
-          /* Centered login */
+          /* Full-height center for login */
           .center-wrap {{
-            min-height: calc(100vh - 120px);
+            min-height: 100vh;
             display:flex; align-items:center; justify-content:center;
           }}
           .login-card {{
@@ -85,15 +82,22 @@ def inject_theme_css(theme: str | None = None):
             background: var(--card); border: 1px solid var(--border);
           }}
           .login-hero {{ text-align:center; margin-bottom: 18px; }}
-          .login-logo {{ width: 96px; height:auto; opacity:.98; margin-bottom:.4rem; }}
+          .login-logo {{ width: 120px; height:auto; opacity:.98; margin-bottom:.4rem; }}
 
-          /* Alerts match theme */
           .stAlert {{ background: var(--alert-bg) !important; color: var(--alert-text) !important; border-radius:12px; }}
           .stAlert p {{ color: var(--alert-text) !important; }}
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+def apply_login_layout():
+    """Tighten top spacing only on the login page."""
+    st.markdown("""
+    <style>
+      .block-container{ padding-top: 0 !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ---------- Building blocks ----------
 def top_nav(active="Dashboard", username: str | None = None):
@@ -109,10 +113,10 @@ def top_nav(active="Dashboard", username: str | None = None):
     with middle:
         selected = option_menu(
             None,
-            ["Dashboard", "Attendance", "Payroll", "Employees", "Reports"],
-            icons=["grid", "clock", "cash-coin", "people", "bar-chart"],
+            ["Dashboard", "Attendance", "Payroll", "Docs", "Employees", "Reports"],
+            icons=["grid", "clock", "cash-coin", "file-earmark-text", "people", "bar-chart"],
             orientation="horizontal",
-            default_index=["Dashboard","Attendance","Payroll","Employees","Reports"].index(active),
+            default_index=["Dashboard","Attendance","Payroll","Docs","Employees","Reports"].index(active),
             styles={
                 "container": {"background": "transparent", "padding": "0"},
                 "nav-link": {"font-size": "14px", "padding":"8px 14px", "color":"var(--muted)"},
@@ -151,67 +155,3 @@ def chart_card(title: str, chart):
     st.markdown(f"<div class='card'><div style='font-weight:700;margin-bottom:.3rem'>{title}</div>", unsafe_allow_html=True)
     st.altair_chart(chart, use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
-
-# ... keep existing imports + theme code ...
-
-def inject_theme_css(theme: str | None = None):
-    t = _THEMES.get(theme or get_theme(), _THEMES["dark"])
-    st.markdown(f"""
-    <style>
-      :root {{
-        --bg: {t["bg"]};
-        --bg2: {t["bg2"]};
-        --card: {t["card"]};
-        --text: {t["text"]};
-        --muted: {t["muted"]};
-        --border: {t["border"]};
-        --brand: {t["brand"]};
-        --nav-sel: {t["nav_sel"]};
-        --alert-bg: {t["alert_bg"]};
-        --alert-text: {t["alert_text"]};
-      }}
-
-      html, body, .stApp {{ background-color: var(--bg) !important; color: var(--text) !important; }}
-      .block-container{{ padding-top:1.2rem; padding-bottom:1.6rem; max-width:1200px; margin:0 auto; }}
-      header [data-testid="stHeader"] {{ background: transparent; }}
-      [data-testid="stSidebar"]{{ display:none; }}
-
-      .topbar {{
-        position: sticky; top: 0; z-index: 1000;
-        background: linear-gradient(180deg, var(--bg) 65%, rgba(0,0,0,0));
-        border-bottom: 1px solid var(--border);
-        padding: .6rem 0 .25rem;
-      }}
-      .brand {{ display:flex; gap:.6rem; align-items:center; font-weight:700; }}
-      .brand span {{ font-size:18px; }}
-
-      .card {{ border-radius:16px; padding:1rem 1.25rem; background:var(--card); border:1px solid var(--border); }}
-      .metric {{ font-size:28px; font-weight:700; line-height:1; }}
-      .metric-label {{ color:var(--muted); font-size:12px; letter-spacing:.04em; }}
-
-      /* Full-height center for login */
-      .center-wrap {{
-        min-height: 100vh;              /* full viewport height */
-        display:flex; align-items:center; justify-content:center;
-      }}
-      .login-card {{
-        width: 480px; border-radius:16px; padding: 26px;
-        background: var(--card); border: 1px solid var(--border);
-      }}
-      .login-hero {{ text-align:center; margin-bottom: 18px; }}
-      .login-logo {{ width: 120px; height:auto; opacity:.98; margin-bottom:.4rem; }}
-
-      .stAlert {{ background: var(--alert-bg) !important; color: var(--alert-text) !important; border-radius:12px; }}
-      .stAlert p {{ color: var(--alert-text) !important; }}
-    </style>
-    """, unsafe_allow_html=True)
-
-def apply_login_layout():
-    """Tighten top spacing only on the login page."""
-    st.markdown("""
-    <style>
-      .block-container{ padding-top: 0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ... keep top_nav / stat_card / chart_card as you have them ...
