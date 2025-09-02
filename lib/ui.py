@@ -1,157 +1,110 @@
-import os
 import streamlit as st
-from streamlit_option_menu import option_menu
+from pathlib import Path
 
-# ---------- Theme tokens ----------
-_THEMES = {
-    "dark": {
-        "bg": "#0B1021",
-        "bg2": "#121A2B",
-        "card": "#0F162C",
-        "text": "#E5E7EB",
-        "muted": "#9CA3AF",
-        "border": "rgba(255,255,255,.06)",
-        "brand": "#2563EB",
-        "nav_sel": "#1F2937",
-        "alert_bg": "#0E1A30",
-        "alert_text": "#C7D2FE",
-    },
-    "light": {
-        "bg": "#F8FAFC",
-        "bg2": "#FFFFFF",
-        "card": "#FFFFFF",
-        "text": "#0F172A",
-        "muted": "#6B7280",
-        "border": "rgba(2,6,23,.06)",
-        "brand": "#2563EB",
-        "nav_sel": "#E5E7EB",
-        "alert_bg": "#EEF2FF",
-        "alert_text": "#1E3A8A",
-    },
-}
+# -------------------- THEME --------------------
 
-def get_theme():
-    return st.session_state.get("theme", "dark")
+def get_theme() -> str:
+    """
+    Returns 'light' or 'dark'. Default is LIGHT.
+    """
+    if "theme" not in st.session_state:
+        st.session_state["theme"] = "light"   # default to light
+    return st.session_state["theme"]
 
-def set_theme(name: str):
-    st.session_state["theme"] = "light" if name == "light" else "dark"
+def _rerun():
+    try:
+        st.rerun()
+    except Exception:
+        try:
+            st.experimental_rerun()  # older Streamlit
+        except Exception:
+            pass
 
-def inject_theme_css(theme: str | None = None):
-    t = _THEMES.get(theme or get_theme(), _THEMES["dark"])
+def inject_theme_css(current: str):
+    """
+    Injects CSS variables for both themes and applies the chosen one.
+    """
+    light_vars = """
+    --bg: #F7F9FC;
+    --card: #FFFFFF;
+    --text: #0F172A;
+    --muted: #475569;
+    --primary: #2563EB;          /* indigo-600 */
+    --primary-contrast: #FFFFFF;
+    --success: #16A34A;          /* green-600 */
+    --warning: #F59E0B;          /* amber-500 */
+    --danger: #DC2626;           /* red-600 */
+    --kpi: #0EA5E9;              /* sky-500 */
+    --border: #E5E7EB;
+    """
+
+    dark_vars = """
+    --bg: #0F172A;               /* slate-900 */
+    --card: #111827;             /* gray-900 */
+    --text: #E5E7EB;             /* gray-200 */
+    --muted: #9CA3AF;            /* gray-400 */
+    --primary: #60A5FA;          /* blue-400 */
+    --primary-contrast: #0B1220;
+    --success: #34D399;          /* green-400 */
+    --warning: #FBBF24;          /* amber-400 */
+    --danger: #F87171;           /* red-400 */
+    --kpi: #38BDF8;              /* sky-400 */
+    --border: #1F2937;
+    """
+
+    chosen = light_vars if current == "light" else dark_vars
+
     st.markdown(
         f"""
         <style>
-          :root {{
-            --bg: {t["bg"]};
-            --bg2: {t["bg2"]};
-            --card: {t["card"]};
-            --text: {t["text"]};
-            --muted: {t["muted"]};
-            --border: {t["border"]};
-            --brand: {t["brand"]};
-            --nav-sel: {t["nav_sel"]};
-            --alert-bg: {t["alert_bg"]};
-            --alert-text: {t["alert_text"]};
-          }}
+        :root {{ {light_vars} }}
+        [data-theme="dark"] {{ {dark_vars} }}
+        [data-theme="light"] {{ {light_vars} }}
 
-          html, body, .stApp {{ background-color: var(--bg) !important; color: var(--text) !important; }}
-          .block-container{{ padding-top:1.2rem; padding-bottom:1.6rem; max-width:1200px; margin:0 auto; }}
-          header [data-testid="stHeader"] {{ background: transparent; }}
-          [data-testid="stSidebar"]{{ display:none; }}
+        /* Apply theme to body */
+        body, .stApp {{ background: var(--bg); color: var(--text); }}
 
-          .topbar {{
-            position: sticky; top: 0; z-index: 1000;
-            background: linear-gradient(180deg, var(--bg) 65%, rgba(0,0,0,0));
+        /* Top brand bar */
+        .hrms-navbar {{
+            position: sticky; top: 0; z-index: 100;
+            padding: 10px 14px;
             border-bottom: 1px solid var(--border);
-            padding: .6rem 0 .25rem;
-          }}
-          .brand {{ display:flex; gap:.6rem; align-items:center; font-weight:700; }}
-          .brand span {{ font-size:18px; }}
+            background: var(--bg);
+        }}
+        .hrms-brand {{
+            display:flex; align-items:center; gap:10px;
+        }}
+        .hrms-brand img {{
+            height: 40px; width:auto;
+            filter: drop-shadow(0 2px 6px rgba(0,0,0,.12));
+            border-radius: 10px;
+        }}
+        .hrms-brand .name {{
+            font-weight: 800; letter-spacing:.3px;
+            font-size: 18px;
+        }}
+        .hrms-menu a, .hrms-menu button {{
+            padding: 8px 10px; border-radius: 10px;
+            text-decoration:none; border:1px solid transparent;
+            color: var(--text); background: transparent;
+        }}
+        .hrms-menu .active {{
+            background: color-mix(in srgb, var(--primary) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+            color: var(--text);
+        }}
 
-          .card {{ border-radius:16px; padding:1rem 1.25rem; background:var(--card); border:1px solid var(--border); }}
-          .metric {{ font-size:28px; font-weight:700; line-height:1; }}
-          .metric-label {{ color:var(--muted); font-size:12px; letter-spacing:.04em; }}
+        /* Stat card */
+        .hrms-card {{
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px 18px 14px;
+        }}
+        .hrms-card .label {{ color: var(--muted); font-size: 13px; }}
+        .hrms-card .value {{ font-size: 28px; font-weight: 800; }}
 
-          /* Full-height center for login */
-          .center-wrap {{
-            min-height: 100vh;
-            display:flex; align-items:center; justify-content:center;
-          }}
-          .login-card {{
-            width: 480px; border-radius:16px; padding: 26px;
-            background: var(--card); border: 1px solid var(--border);
-          }}
-          .login-hero {{ text-align:center; margin-bottom: 18px; }}
-          .login-logo {{ width: 120px; height:auto; opacity:.98; margin-bottom:.4rem; }}
-
-          .stAlert {{ background: var(--alert-bg) !important; color: var(--alert-text) !important; border-radius:12px; }}
-          .stAlert p {{ color: var(--alert-text) !important; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def apply_login_layout():
-    """Tighten top spacing only on the login page."""
-    st.markdown("""
-    <style>
-      .block-container{ padding-top: 0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ---------- Building blocks ----------
-def top_nav(active="Dashboard", username: str | None = None):
-    st.markdown('<div class="topbar">', unsafe_allow_html=True)
-    left, middle, right = st.columns([2, 6, 2])
-
-    with left:
-        logo_path = "assets/logo.png"
-        if os.path.exists(logo_path):
-            st.image(logo_path, width=40)
-        st.markdown('<div class="brand"><span>HRMS</span></div>', unsafe_allow_html=True)
-
-    with middle:
-        selected = option_menu(
-            None,
-            ["Dashboard", "Attendance", "Payroll", "Docs", "Employees", "Reports"],
-            icons=["grid", "clock", "cash-coin", "file-earmark-text", "people", "bar-chart"],
-            orientation="horizontal",
-            default_index=["Dashboard","Attendance","Payroll","Docs","Employees","Reports"].index(active),
-            styles={
-                "container": {"background": "transparent", "padding": "0"},
-                "nav-link": {"font-size": "14px", "padding":"8px 14px", "color":"var(--muted)"},
-                "nav-link-selected": {"background-color": "var(--nav-sel)", "color":"var(--text)", "border-radius":"10px"},
-            },
-        )
-
-    with right:
-        is_light = st.toggle("Light", value=(get_theme()=="light"))
-        new_theme = "light" if is_light else "dark"
-        if new_theme != get_theme():
-            set_theme(new_theme)
-            st.rerun()
-
-        if username:
-            st.caption(f"Signed in as **{username}**")
-            if st.button("Logout"):
-                if "user" in st.session_state: del st.session_state["user"]
-                st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-    return selected
-
-def stat_card(label: str, value: str):
-    st.markdown(
-        f"""
-        <div class="card">
-          <div class="metric">{value}</div>
-          <div class="metric-label">{label}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def chart_card(title: str, chart):
-    st.markdown(f"<div class='card'><div style='font-weight:700;margin-bottom:.3rem'>{title}</div>", unsafe_allow_html=True)
-    st.altair_chart(chart, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        /* Buttons */
+        .hrms-primary button {{
+            background: var(--primary) !important;
+            color: var(--primary-contra
