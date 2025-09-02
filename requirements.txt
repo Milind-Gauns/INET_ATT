@@ -7,3 +7,4 @@ reportlab
 boto3
 streamlit-option-menu
 altair
+pdfplumber
