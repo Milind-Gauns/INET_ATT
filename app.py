@@ -2,11 +2,15 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import date
+import datetime as dt
+from sqlalchemy import text
 
 from lib.auth import require_login, user_role
 from lib.db import ensure_schema, seed_if_empty, db, engine
 from lib.payroll import run_payroll
 from lib.ui import inject_theme_css, top_nav, stat_card, chart_card, get_theme
+from lib.pdf_ingest import parse_payslip, parse_consolidated
+from lib.storage import put_bytes, presigned_url
 
 # ---------- Page & Theme ----------
 st.set_page_config(page_title="HRMS Dashboard", page_icon="🧩", layout="wide")
@@ -14,7 +18,7 @@ if "theme" not in st.session_state:
     st.session_state["theme"] = "dark"
 inject_theme_css(get_theme())
 
-# ---------- Data init (safe to call every run) ----------
+# ---------- Data init ----------
 ensure_schema()
 seed_if_empty()
 
@@ -159,10 +163,112 @@ elif page == "Payroll":
         st.success(f"Processed {len(results)} employees")
         st.dataframe(pd.DataFrame(results), use_container_width=True)
 
+# ---------- DOCS (PDF ingest) ----------
+elif page == "Docs":
+    st.title("Payroll Documents")
+    tab1, tab2 = st.tabs(["Single Pay Slip", "Consolidated Statement"])
+
+    # ---- Single Pay Slip ----
+    with tab1:
+        f = st.file_uploader("Upload Pay Slip (PDF)", type=["pdf"], key="pslip")
+        if f:
+            data = f.read()
+            parsed = parse_payslip(data)
+
+            colA, colB = st.columns(2)
+            with colA:
+                st.write("**Employee**:", parsed.get("name"))
+                st.write("**Month/Year**:", f"{parsed.get('month')}-{parsed.get('year')}")
+                st.write("**Gross**:", parsed.get("gross"))
+                st.write("**Basic** / **HRA**:", parsed.get("basic"), "/", parsed.get("hra"))
+            with colB:
+                st.write("**PF (EE/ER)**:", parsed.get("pf_ee"), "/", parsed.get("pf_er"))
+                st.write("**ESI (EE/ER)**:", parsed.get("esi_ee"), "/", parsed.get("esi_er"))
+                st.write("**LWF (EE/ER)**:", parsed.get("lwf_ee"), "/", parsed.get("lwf_er"))
+                st.write("**Admin PF**:", parsed.get("admin_pf"))
+                st.write("**NET**:", parsed.get("net"))
+
+            if st.button("Save to DB & Storage", type="primary"):
+                year = int(parsed["year"]); month = int(parsed["month"])
+                emp_name = (parsed["name"] or "").strip()
+
+                fname, *rest = emp_name.split(" ")
+                lname = " ".join(rest) if rest else ""
+
+                with db() as conn:
+                    # find employee by first/last name
+                    row = conn.execute(
+                        text("SELECT id FROM employees WHERE lower(first_name)=lower(:f) AND lower(last_name)=lower(:l)"),
+                        {"f": fname, "l": lname},
+                    ).fetchone()
+
+                    if row:
+                        emp_id = row[0]
+                    else:
+                        # create minimal employee
+                        code = "E" + str(abs(hash(emp_name)) % 10_000)
+                        conn.exec_driver_sql(
+                            "INSERT INTO employees(code, first_name, last_name, base_salary, active) VALUES (?, ?, ?, ?, ?)"
+                            if engine.dialect.name=="sqlite" else
+                            "INSERT INTO employees(code, first_name, last_name, base_salary, active) VALUES (%s,%s,%s,%s,%s)",
+                            (code, fname, lname, parsed.get("gross") or 0, 1)
+                        )
+                        emp_id = conn.exec_driver_sql(
+                            "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM employees"
+                        ).scalar()
+
+                    # ensure payroll run
+                    run = conn.exec_driver_sql(
+                        "SELECT id FROM payroll_runs WHERE month=? AND year=?"
+                        if engine.dialect.name=="sqlite" else
+                        "SELECT id FROM payroll_runs WHERE month=%s AND year=%s",
+                        (month, year)
+                    ).fetchone()
+                    if run:
+                        run_id = run[0]
+                    else:
+                        conn.exec_driver_sql(
+                            "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (?,?,?,?)"
+                            if engine.dialect.name=="sqlite" else
+                            "INSERT INTO payroll_runs(month,year,status,processed_on) VALUES (%s,%s,%s,%s)",
+                            (month, year, "Imported", dt.datetime.utcnow())
+                        )
+                        run_id = conn.exec_driver_sql(
+                            "SELECT last_insert_rowid()" if engine.dialect.name=="sqlite" else "SELECT max(id) FROM payroll_runs"
+                        ).scalar()
+
+                    # store PDF & insert payslip
+                    key = f"uploads/{year}/{month:02d}/payslip_{emp_id}.pdf"
+                    put_bytes(key, data)
+                    url = presigned_url(key) or key
+
+                    conn.exec_driver_sql(
+                        "INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) VALUES (?,?,?,?,?,?)"
+                        if engine.dialect.name=="sqlite" else
+                        "INSERT INTO payslips(run_id, employee_id, gross, deductions, net, url) VALUES (%s,%s,%s,%s,%s,%s)",
+                        (
+                            run_id,
+                            emp_id,
+                            parsed.get("gross") or 0,
+                            (parsed.get("gross") or 0) - (parsed.get("net") or 0),
+                            parsed.get("net") or 0,
+                            url
+                        )
+                    )
+                st.success("Saved payslip & uploaded PDF")
+
+    # ---- Consolidated ----
+    with tab2:
+        f2 = st.file_uploader("Upload Consolidated Statement (PDF)", type=["pdf"], key="consol")
+        if f2:
+            df = parse_consolidated(f2.read())
+            st.dataframe(df, use_container_width=True)
+            st.download_button("Download as CSV", df.to_csv(index=False).encode(), "consolidated.csv", "text/csv")
+            st.info("(Optional) We can add a bulk ‘Write to payslips’ that matches names to employees and inserts records.")
+
 # ---------- EMPLOYEES ----------
 elif page == "Employees":
     st.title("Employees")
-    # Pandas can read directly from the SQLAlchemy engine
     df = pd.read_sql(
         "SELECT id, code, first_name, last_name, base_salary, active FROM employees",
         con=engine,
