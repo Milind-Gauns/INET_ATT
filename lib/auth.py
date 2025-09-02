@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from .ui import inject_theme_css, apply_login_layout  # <-- add apply_login_layout
+from .ui import inject_theme_css, apply_login_layout
 
 USERS = {
     "admin": {"password": "admin123", "role": "Admin"},
@@ -11,7 +11,7 @@ USERS = {
 
 def login_ui():
     inject_theme_css()
-    apply_login_layout()  # <-- removes top padding on login page
+    apply_login_layout()
 
     st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
 
@@ -19,7 +19,6 @@ def login_ui():
     st.markdown('<div class="login-hero">', unsafe_allow_html=True)
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        # No use_column_width; just set width (bigger logo)
         st.image(logo_path, width=120)
     st.markdown("#### INET Computer Services HRMS")
     st.markdown('</div>', unsafe_allow_html=True)
