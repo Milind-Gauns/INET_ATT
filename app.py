@@ -1,4 +1,4 @@
-# app.py
+# app.py (header)
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -6,20 +6,38 @@ from datetime import date
 import datetime as dt
 from sqlalchemy import text
 
-from lib.auth import require_login, user_role
+from lib.auth import require_login, user_role, logout_button
 from lib.db import ensure_schema, seed_if_empty, db, engine
 from lib.payroll import run_payroll
 from lib.ui import inject_theme_css, top_nav, stat_card, chart_card, get_theme
-from lib.auth import logout_button
-# ...
-logout_button("Logout")
-
 from lib.pdf_ingest import parse_payslip, parse_consolidated
 from lib.storage import put_bytes, presigned_url
 try:
     from lib.matching import match_consolidated_names
 except Exception:
     match_consolidated_names = None
+
+st.set_page_config(page_title="INET HRMS", page_icon="🧩", layout="wide")
+
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "light"
+
+inject_theme_css(get_theme())
+
+ensure_schema()
+seed_if_empty()
+
+# ---- login happens BEFORE nav & pages ----
+require_login()
+
+username = st.session_state["user"]["username"]
+role = user_role()
+
+active = st.session_state.get("active_page", "dashboard")
+page_key = top_nav(active, username=username, app_name="INET HRMS", logo_path="assets/logo.png")
+
+# Optional: show a logout button just under the nav
+logout_button("Logout")
 
 # ---------- Page & Theme ----------
 st.set_page_config(page_title="INET HRMS", page_icon="🧩", layout="wide")
