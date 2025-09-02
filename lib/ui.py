@@ -1,29 +1,30 @@
 # lib/ui.py
 from __future__ import annotations
 import base64
-import streamlit as st
 from typing import Dict
+
 import altair as alt
+import streamlit as st
 
 # ---- Palettes (light first) ----
 PALETTE_LIGHT: Dict[str, str] = {
     "mode": "light",
-    "primary": "#2E5AAC",           # HRMS blue
-    "accent":  "#10B981",           # emerald
+    "primary": "#2E5AAC",  # HRMS blue
+    "accent":  "#10B981",  # emerald
     "bg":      "#F7FAFC",
     "panel":   "#FFFFFF",
     "text":    "#0F172A",
-    "muted":   "#64748B"            # slate-500
+    "muted":   "#64748B",  # slate-500
 }
 
 PALETTE_DARK: Dict[str, str] = {
     "mode": "dark",
     "primary": "#6EA8FE",
     "accent":  "#34D399",
-    "bg":      "#0B1220",           # deep navy
-    "panel":   "#111827",           # slate-900
-    "text":    "#E5E7EB",           # slate-200
-    "muted":   "#9CA3AF"            # slate-400
+    "bg":      "#0B1220",
+    "panel":   "#111827",
+    "text":    "#E5E7EB",
+    "muted":   "#9CA3AF",
 }
 
 def get_theme() -> Dict[str, str]:
@@ -34,8 +35,7 @@ def get_theme() -> Dict[str, str]:
 def _img_to_base64(path: str) -> str:
     try:
         with open(path, "rb") as f:
-            import base64 as b64
-            return b64.b64encode(f.read()).decode("utf-8")
+            return base64.b64encode(f.read()).decode("utf-8")
     except Exception:
         return ""
 
@@ -52,10 +52,12 @@ def inject_theme_css(theme: Dict[str, str]) -> None:
         --hrms-muted:   {theme['muted']};
         --hrms-card-radius: 16px;
       }}
+
       [data-testid="stAppViewContainer"] {{
         background: var(--hrms-bg);
         color: var(--hrms-text);
       }}
+
       .hrms-nav {{
         background: var(--hrms-panel);
         border-radius: 14px;
@@ -71,13 +73,9 @@ def inject_theme_css(theme: Dict[str, str]) -> None:
         height:34px; width:34px; border-radius:8px;
         border:1px solid rgba(0,0,0,0.06); background:#fff;
       }}
-      .hrms-nav-links a {{
-        text-decoration:none; color:var(--hrms-text);
-        font-weight:600; display:inline-flex; align-items:center; gap:8px;
-        padding:6px 12px; border-radius:10px;
+      .hrms-right .toggle-label {{
+        font-size:12px; color:var(--hrms-muted); margin-right:6px;
       }}
-      .hrms-nav-links a.active {{ background: rgba(46,90,172,0.12); color:var(--hrms-primary); }}
-      .hrms-right .toggle-label {{ font-size:12px; color:var(--hrms-muted); margin-right:6px; }}
 
       .hrms-card {{
         background: var(--hrms-panel);
@@ -89,14 +87,13 @@ def inject_theme_css(theme: Dict[str, str]) -> None:
       .hrms-kpi-title {{ color: var(--hrms-muted); font-size:14px; margin-bottom:4px; }}
       .hrms-kpi-value {{ font-size:34px; font-weight:800; color: var(--hrms-text); }}
 
-      .hrms-section-title h1, .hrms-section-title h2 {{
-        margin-top:6px !important; margin-bottom:6px !important;
-      }}
-
       .stButton>button {{
-        border-radius: 10px; border: none;
-        background: var(--hrms-primary); color:white;
-        padding: 8px 14px; font-weight:600;
+        border-radius: 10px;
+        border: none;
+        background: var(--hrms-primary);
+        color: white;
+        padding: 8px 12px;
+        font-weight: 600;
       }}
       .stButton>button:hover {{ filter: brightness(1.05); }}
       .stTabs [data-baseweb="tab"] {{ font-weight:600; }}
@@ -106,18 +103,16 @@ def inject_theme_css(theme: Dict[str, str]) -> None:
     alt.themes.enable("none")
 
 
-def _nav_link(label: str, key: str, active_key: str) -> str:
-    cls = "active" if key == active_key else ""
-    return f'<a class="{cls}" href="?page={key}">{label}</a>'
-
-
 def top_nav(active_key: str, username: str, app_name: str = "INET HRMS",
             logo_path: str = "assets/logo.png") -> str:
-    """Render top nav with logo/brand, page links, and theme toggle."""
+    """
+    Render a top nav with logo/brand, page buttons (no new tabs), theme toggle.
+    Returns the chosen page key.
+    """
     theme = get_theme()
     light_on = theme["mode"] == "light"
 
-    # read current query param selection if present
+    # If query param has a page, prefer it
     qp = st.query_params
     if "page" in qp:
         active_key = qp["page"]
@@ -131,31 +126,48 @@ def top_nav(active_key: str, username: str, app_name: str = "INET HRMS",
         ("Reports",    "reports"),
     ]
 
-    links_html = "".join(_nav_link(lbl, key, active_key) for lbl, key in pages)
+    # Brand bar
     b64 = _img_to_base64(logo_path)
     img_tag = f'<img src="data:image/png;base64,{b64}" alt="logo">' if b64 else ""
-
-    with st.container():
-        st.markdown(
-            f"""
-            <div class="hrms-nav">
-              <div style="display:flex; align-items:center; justify-content:space-between;">
-                <div class="hrms-brand">{img_tag}<span>{app_name}</span></div>
-                <div class="hrms-nav-links" style="display:flex; gap:6px;">{links_html}</div>
-                <div class="hrms-right" style="display:flex; align-items:center; gap:10px;">
-                  <span class="toggle-label">Theme</span>
-                </div>
-              </div>
+    st.markdown(
+        f"""
+        <div class="hrms-nav">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div class="hrms-brand">{img_tag}<span>{app_name}</span></div>
+            <div class="hrms-right" style="display:flex; align-items:center; gap:10px;">
+              <span class="toggle-label">Theme</span>
             </div>
-            """,
-            unsafe_allow_html=True
-        )
-        col1, col2, col3 = st.columns([0.78, 0.12, 0.10])
-        with col2:
-            toggle = st.toggle("Light", value=light_on, label_visibility="collapsed")
-        with col3:
-            st.write(f"Signed in as **{username}**")
-        st.session_state["theme"] = "light" if toggle else "dark"
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Theme toggle + "Signed in" row
+    c1, c2, c3 = st.columns([0.78, 0.12, 0.10])
+    with c2:
+        toggle = st.toggle("Light", value=light_on, label_visibility="collapsed")
+    with c3:
+        st.write(f"Signed in as **{username}**")
+    st.session_state["theme"] = "light" if toggle else "dark"
+
+    # Page buttons row
+    cols = st.columns(len(pages))
+    clicked = None
+    for i, (label, key) in enumerate(pages):
+        style = {}
+        if key == active_key:
+            # subtle visual hint: we just show it as pressed via label
+            label_txt = f"• {label}"
+        else:
+            label_txt = label
+        if cols[i].button(label_txt, key=f"nav_{key}", use_container_width=True):
+            clicked = key
+
+    if clicked:
+        st.session_state["active_page"] = clicked
+        st.query_params["page"] = clicked
+        st.rerun()
 
     st.session_state["active_page"] = active_key
     return active_key
