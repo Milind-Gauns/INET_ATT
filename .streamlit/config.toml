@@ -1,8 +1,7 @@
 [theme]
 base = "light"
-# HRMS palette (light)
-primaryColor = "#2563EB"                # Indigo 600
-backgroundColor = "#F7F9FC"             # Very light slate
-secondaryBackgroundColor = "#FFFFFF"    # White cards
-textColor = "#0F172A"                   # Slate-900
+primaryColor = "#2E5AAC"              # HRMS blue
+backgroundColor = "#F7FAFC"           # app background
+secondaryBackgroundColor = "#FFFFFF"  # cards/panels
+textColor = "#0F172A"                 # slate-900
 font = "Inter"
