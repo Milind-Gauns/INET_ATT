@@ -3,8 +3,6 @@ from __future__ import annotations
 import os
 import streamlit as st
 
-# --- very simple credential store for demo ---
-# Change these to whatever you want, or wire up to a DB later.
 USERS = {
     "admin":      {"password": "admin",  "role": "Admin"},
     "client":     {"password": "client", "role": "Client"},
@@ -13,21 +11,22 @@ USERS = {
 }
 
 APP_TITLE = "INET Computer Services HRMS"
-LOGO_PATH = "assets/logo.png"  # optional; shown on login if present
+LOGO_PATH = "assets/logo.png"
 
 
 def _logo():
-    """Show the logo on the login screen, if present."""
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, width=96)
 
 
-def login_ui() -> bool:
-    """Render the login form centered on the page and return True on success."""
-    st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)  # top spacing
+def login_ui() -> None:
+    """Show login UI and handle submission. On success -> set session + rerun."""
+    st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
     _logo()
-    st.markdown(f"<h3 style='text-align:center;margin:6px 0 18px 0'>{APP_TITLE}</h3>",
-                unsafe_allow_html=True)
+    st.markdown(
+        f"<h3 style='text-align:center;margin:6px 0 18px 0'>{APP_TITLE}</h3>",
+        unsafe_allow_html=True,
+    )
 
     with st.form("login_form", clear_on_submit=False):
         u = st.text_input("Username", autocomplete="username")
@@ -39,24 +38,23 @@ def login_ui() -> bool:
         if rec and p == rec["password"]:
             st.session_state["user"] = {"username": u, "role": rec["role"]}
             st.success(f"Welcome, {u} ({rec['role']})")
-            return True
+            # Immediate clean rerun to remove the login UI from the page
+            st.rerun()
         else:
             st.error("Invalid username or password")
-    return False
 
 
 def require_login() -> None:
     """
-    If no active session user, show the login UI and stop the app run.
+    If user not logged in, render login UI and stop the run.
     """
     if st.session_state.get("user"):
         return
-    if not login_ui():
-        st.stop()
+    login_ui()
+    st.stop()  # prevent the rest of the page from rendering under the login form
 
 
 def logout_button(label: str = "Logout") -> None:
-    """Render a logout button; on click it clears the session user and reruns."""
     if st.button(label, key="logout_btn"):
         st.session_state.pop("user", None)
         st.session_state.pop("active_page", None)
@@ -64,5 +62,4 @@ def logout_button(label: str = "Logout") -> None:
 
 
 def user_role() -> str:
-    """Convenience accessor for the current user's role."""
     return (st.session_state.get("user") or {}).get("role", "Guest")
