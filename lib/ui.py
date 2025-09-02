@@ -107,4 +107,97 @@ def inject_theme_css(current: str):
         /* Buttons */
         .hrms-primary button {{
             background: var(--primary) !important;
-            color: var(--primary-contra
+            color: var(--primary-contrast) !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    # mark the chosen theme in DOM so CSS above can target
+    st.html(f"""<script>
+      document.documentElement.setAttribute('data-theme', '{current}');
+    </script>""")
+
+# -------------------- NAV --------------------
+
+def _nav_button(label: str, key: str, active: bool) -> bool:
+    css = "active" if active else ""
+    return st.button(label, key=f"nav_{key}", use_container_width=False, type="secondary")
+
+def top_nav(active_page: str = "Dashboard", username: str = "") -> str:
+    """
+    Renders the top navigation bar and returns the current page.
+    Stores the selected page in st.session_state['page'].
+    """
+    if "page" not in st.session_state:
+        st.session_state["page"] = active_page
+
+    with st.container():
+        st.markdown('<div class="hrms-navbar">', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([0.34, 0.46, 0.20])
+
+        # Brand + Logo
+        with c1:
+            logo_path = Path("assets/logo.png")
+            logo_html = ""
+            if logo_path.exists():
+                logo_html = f'<img src="app://assets/logo.png" alt="logo" />'
+            st.markdown(
+                f"""
+                <div class="hrms-brand">
+                    {logo_html}
+                    <div class="name">INET HRMS</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Menu
+        with c2:
+            cols = st.columns(6)
+            items = ["Dashboard", "Attendance", "Payroll", "Docs", "Employees", "Reports"]
+            for idx, it in enumerate(items):
+                with cols[idx]:
+                    pressed = st.button(it, key=f"menu_{it}",
+                                        help=it,
+                                        type="secondary",
+                                        use_container_width=True)
+                    # 'active' look handled by CSS when needed; we keep logic simple here
+                    if pressed:
+                        st.session_state["page"] = it
+
+        # Theme + User
+        with c3:
+            st.write(f"Signed in as **{username or 'user'}**")
+            switch = st.toggle("Light", value=(get_theme() == "light"))
+            new_theme = "light" if switch else "dark"
+            if new_theme != get_theme():
+                st.session_state["theme"] = new_theme
+                _rerun()
+
+            st.button("Logout", key="logout_btn", type="secondary")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    return st.session_state["page"]
+
+# -------------------- CARDS/CHART WRAPPERS --------------------
+
+def stat_card(label: str, value: str):
+    st.markdown(
+        f"""
+        <div class="hrms-card">
+          <div class="value">{value}</div>
+          <div class="label">{label}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def chart_card(title: str, chart):
+    st.markdown(
+        f'<div class="hrms-card" style="padding:16px 16px 6px;"><div class="label" style="font-weight:700;margin-bottom:6px;">{title}</div>',
+        unsafe_allow_html=True,
+    )
+    st.altair_chart(chart, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
